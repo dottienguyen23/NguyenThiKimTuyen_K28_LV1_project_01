@@ -6,6 +6,8 @@ Lấy khoảng **200.000 sản phẩm** từ API sản phẩm của Tiki bằng 
 
 📘 **Quá trình xây dựng từng bậc:** [GUIDE.vi.md](GUIDE.vi.md) · [GUIDE.md](GUIDE.md)
 
+🛠️ **Cách chạy từ đầu đến cuối:** [RUNBOOK.vi.md](RUNBOOK.vi.md) · [RUNBOOK.md](RUNBOOK.md)
+
 ## Yêu cầu (DoD)
 
 - [x] Lấy thông tin sản phẩm cho mọi ID trong danh sách đầu vào
@@ -118,6 +120,7 @@ project_02/
 │   ├── step9_retry_failed.py        # lượt hai cho lỗi tạm thời, có circuit breaker
 │   └── step10_final_report.py       # gộp hai lượt -> final_errors.csv
 ├── GUIDE.md / GUIDE.vi.md
+├── RUNBOOK.md / RUNBOOK.vi.md   # mọi lệnh, theo thứ tự
 └── requirements.txt
 ```
 

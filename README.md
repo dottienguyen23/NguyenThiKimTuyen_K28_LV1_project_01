@@ -6,6 +6,8 @@ Fetch about **200,000 products** from the Tiki product API with Python, keep the
 
 📘 **How it was built, step by step:** [GUIDE.md](GUIDE.md) · [GUIDE.vi.md](GUIDE.vi.md)
 
+🛠️ **How to run it, start to finish:** [RUNBOOK.md](RUNBOOK.md) · [RUNBOOK.vi.md](RUNBOOK.vi.md)
+
 ## Requirements (DoD)
 
 - [x] Fetch product details for every ID in the input list
@@ -118,6 +120,7 @@ project_02/
 │   ├── step9_retry_failed.py        # second pass for temporary errors, with a circuit breaker
 │   └── step10_final_report.py       # combines both passes -> final_errors.csv
 ├── GUIDE.md / GUIDE.vi.md
+├── RUNBOOK.md / RUNBOOK.vi.md   # every command, in order
 └── requirements.txt
 ```
 
