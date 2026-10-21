@@ -23,11 +23,14 @@ Fetch about **200,000 products** from the Tiki product API with Python, keep the
 | Metric | Value |
 |---|---|
 | Unique input IDs | 200,000 |
-| Products saved (after the retry pass) | _[fill in from `step10_final_report.py`]_ |
+| Products saved, first pass | **114,108 (57.1%)** |
+| Failed IDs, first pass | **85,892 (42.9%)**: `HTTP 404` 73,965 (37.0%) · `ConnectionError` 11,915 (6.0%) · `ReadTimeout` 12 |
+| Products + failed = input IDs | **MATCH ✅** (0 missing) |
+| Duplicate product rows | **0** |
+| Sent to the retry pass | 11,927 IDs (every error except `HTTP 404`) |
+| Products saved after the retry pass | _[fill in from `step10_final_report.py` after step 9]_ |
 | Recovered in the retry pass | _[fill in]_ |
 | Final failed IDs | _[fill in]_, mostly `HTTP 404` (products removed from Tiki) |
-| Products + failed = input IDs | _[MATCH / MISMATCH]_ |
-| Duplicate ids in output | _[fill in]_ |
 | Time per healthy batch of 1,000 | about 23 min (≈ 1.4 s per ID) |
 | Total wall-clock time (first pass) | about 6 days, see [Run timeline](#run-timeline-1521-oct-2026) |
 
@@ -64,7 +67,7 @@ Measured with `steps/step8c_runtime.py` from the time each output file was saved
 | 18 Oct 23:51 → 19 Oct 00:15 | Scraper restarted in `tmux`, batch 74 finished | ✅ The checkpoint skipped batches 1–73 |
 | 19 Oct → 21 Oct morning | Batches 75–200 at a steady pace, two interruptions of ~1h40m (before 157 and 187) | ✅ Run complete: 200/200 batches |
 
-**Key finding:** the timeout period lines up with the Wi-Fi problem. The connection was most likely unstable or down for about 1.5 days, and `scraper_simple.py` kept going, spending about 40 hours on requests that could not succeed and turning about 12,000 IDs into `ReadTimeout`/`ConnectTimeout` errors. Those IDs go to the retry pass (`steps/step9_retry_failed.py`).
+**Key finding:** the timeout period lines up with the Wi-Fi problem. The connection was most likely unstable or down for about 1.5 days, and `scraper_simple.py` kept going, spending about 40 hours on requests that could not succeed and turning **11,915 IDs into `ConnectionError`** (no network at all, rather than a slow server). Those IDs go to the retry pass (`steps/step9_retry_failed.py`).
 
 | Time | Value |
 |---|---|
@@ -84,7 +87,7 @@ Measured with `steps/step8c_runtime.py` from the time each output file was saved
 | | Running `probe_rate.py 1 150` straight after: blocked at request 1. The block was still active, so a rest between tests is needed. A `curl` check a few minutes later returned JSON again |
 | Parallel requests with `ThreadPoolExecutor`, tested with `steps/probe_workers.py` | **1 worker (0.64 req/s):** 100 requests, no block, 55 ok / 45 `HTTP 404`. **2 workers (1.43 req/s):** **blocked**: 62 of 100 requests got the block page (31 ok / 7 `HTTP 404` before it). Tiki's limit is **below ~1.4 req/s**, so more workers cannot speed this up → `MAX_WORKERS = 1` |
 | User-Agent check | `curl` with its default `curl/8.5.0` User-Agent also got JSON: the block is about **request rate**, not about the header |
-| Never retrying `HTTP 404` | About 31% of IDs are products that no longer exist; each costs one request, not several |
+| Never retrying `HTTP 404` | 37% of IDs (73,965) are products that no longer exist; each costs one request, not several |
 | **Circuit breaker** (retry pass) | After 20 network errors in a row: stop, wait until the API answers, redo those IDs. Would have saved most of the ~40 h |
 | **Shorter timeout** (retry pass) | `TIMEOUT = 5` instead of 10: a dead request costs 6 s instead of 11 s |
 | Avoiding pauses | `tmux`, Windows sleep set to *Never*, fixing Wi-Fi without restarting |
@@ -102,7 +105,7 @@ Measured with `steps/step8c_runtime.py` from the time each output file was saved
 | 5 | `scraper.py` redoes the whole batch after a block | Batch 2 took 3h18m | A deliberate trade-off: every saved batch is complete |
 | 6 | Project on the Windows drive (`/mnt/c`) | Slower file writes; false "modified" errors from `git subtree` | Keep long-running projects in the WSL file system (`~/projects/`) |
 
-Not a mistake: the ~31% `HTTP 404` rate comes from the data. Those products were removed from Tiki after the ID list was created, and they are correctly never retried.
+Not a mistake: the 37% `HTTP 404` rate (about 31% in the first test batches) comes from the data. Those products were removed from Tiki after the ID list was created, and they are correctly never retried.
 
 ## Project structure
 
