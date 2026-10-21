@@ -23,11 +23,14 @@ Lấy khoảng **200.000 sản phẩm** từ API sản phẩm của Tiki bằng 
 | Chỉ số | Giá trị |
 |---|---|
 | Số ID đầu vào (không trùng) | 200.000 |
-| Số sản phẩm đã lưu (sau lượt chạy lại) | _[điền từ `step10_final_report.py`]_ |
+| Số sản phẩm đã lưu, lượt một | **114.108 (57,1%)** |
+| Số ID lỗi, lượt một | **85.892 (42,9%)**: `HTTP 404` 73.965 (37,0%) · `ConnectionError` 11.915 (6,0%) · `ReadTimeout` 12 |
+| Sản phẩm + lỗi = số ID đầu vào | **KHỚP ✅** (0 ID bị thiếu) |
+| Số dòng sản phẩm trùng | **0** |
+| Đưa vào lượt chạy lại | 11.927 ID (mọi lỗi trừ `HTTP 404`) |
+| Số sản phẩm sau lượt chạy lại | _[điền từ `step10_final_report.py` sau step 9]_ |
 | Lấy lại được ở lượt chạy lại | _[điền]_ |
 | Số ID lỗi cuối cùng | _[điền]_, chủ yếu là `HTTP 404` (sản phẩm đã bị xóa khỏi Tiki) |
-| Sản phẩm + lỗi = số ID đầu vào | _[KHỚP / KHÔNG KHỚP]_ |
-| Số id trùng trong output | _[điền]_ |
 | Thời gian mỗi batch 1.000 ID khi chạy bình thường | khoảng 23 phút (≈ 1,4 giây mỗi ID) |
 | Tổng thời gian thực tế (lượt một) | khoảng 6 ngày, xem [Dòng thời gian](#dòng-thời-gian-lần-chạy-1510--21102026) |
 
@@ -64,7 +67,7 @@ data/ids.csv ──► đọc & bỏ trùng ID ──► chia batch 1.000 ID
 | 18/10 23:51 → 19/10 00:15 | Chạy lại scraper trong `tmux`, batch 74 xong | ✅ Checkpoint bỏ qua batch 1–73 |
 | 19/10 → sáng 21/10 | Batch 75–200 chạy đều, có 2 lần gián đoạn khoảng 1h40m (trước batch 157 và 187) | ✅ Xong: 200/200 batch |
 
-**Phát hiện chính:** giai đoạn timeout trùng với lúc wifi có vấn đề. Kết nối nhiều khả năng chập chờn hoặc mất trong khoảng 1,5 ngày, và `scraper_simple.py` vẫn chạy tiếp: tốn khoảng 40 giờ cho các request không thể thành công, và biến khoảng 12.000 ID thành lỗi `ReadTimeout`/`ConnectTimeout`. Các ID này được chạy lại ở lượt hai (`steps/step9_retry_failed.py`).
+**Phát hiện chính:** giai đoạn timeout trùng với lúc wifi có vấn đề. Kết nối nhiều khả năng chập chờn hoặc mất trong khoảng 1,5 ngày, và `scraper_simple.py` vẫn chạy tiếp: tốn khoảng 40 giờ cho các request không thể thành công, và biến **11.915 ID thành lỗi `ConnectionError`** (hoàn toàn không có mạng, chứ không phải server chậm). Các ID này được chạy lại ở lượt hai (`steps/step9_retry_failed.py`).
 
 | Thời gian | Giá trị |
 |---|---|
@@ -84,7 +87,7 @@ data/ids.csv ──► đọc & bỏ trùng ID ──► chia batch 1.000 ID
 | | Chạy `probe_rate.py 1 150` ngay sau đó: bị chặn ở request đầu tiên. Lệnh chặn vẫn còn hiệu lực, nên cần nghỉ giữa các lần thử. Kiểm tra bằng `curl` vài phút sau thì đã nhận lại JSON |
 | Gửi request song song bằng `ThreadPoolExecutor`, đo bằng `steps/probe_workers.py` | **1 worker (0,64 req/s):** 100 request, không bị chặn, 55 ok / 45 `HTTP 404`. **2 worker (1,43 req/s):** **bị chặn**: 62 trên 100 request nhận trang chặn (31 ok / 7 `HTTP 404` trước đó). Giới hạn của Tiki **dưới ~1,4 req/s**, nên thêm worker không thể làm nhanh hơn → `MAX_WORKERS = 1` |
 | Kiểm tra User-Agent | `curl` với User-Agent mặc định `curl/8.5.0` cũng nhận được JSON: lệnh chặn dựa vào **tốc độ request**, không dựa vào header |
-| Không bao giờ chạy lại `HTTP 404` | Khoảng 31% ID là sản phẩm không còn; mỗi ID chỉ tốn một request, không phải nhiều lần |
+| Không bao giờ chạy lại `HTTP 404` | 37% ID (73.965) là sản phẩm không còn; mỗi ID chỉ tốn một request, không phải nhiều lần |
 | **Circuit breaker** (lượt chạy lại) | Sau 20 lỗi mạng liên tiếp: dừng, chờ đến khi API trả lời, chạy lại các ID đó. Lẽ ra đã tiết kiệm được phần lớn khoảng 40 giờ |
 | **Timeout ngắn hơn** (lượt chạy lại) | `TIMEOUT = 5` thay vì 10: một request chết tốn 6 giây thay vì 11 giây |
 | Tránh gián đoạn | `tmux`, đặt Windows sleep = *Never*, sửa wifi mà không restart |
@@ -102,7 +105,7 @@ data/ids.csv ──► đọc & bỏ trùng ID ──► chia batch 1.000 ID
 | 5 | `scraper.py` làm lại cả batch sau khi bị chặn | Batch 2 mất 3h18m | Đánh đổi có chủ ý: batch nào được lưu cũng đầy đủ |
 | 6 | Project nằm trên ổ Windows (`/mnt/c`) | Ghi file chậm hơn; `git subtree` báo thay đổi giả | Project chạy lâu nên để trong hệ thống file của WSL (`~/projects/`) |
 
-Không phải lỗi: khoảng 31% `HTTP 404` đến từ dữ liệu. Các sản phẩm này đã bị xóa khỏi Tiki sau khi danh sách ID được tạo, và đúng là không nên chạy lại chúng.
+Không phải lỗi: 37% `HTTP 404` (khoảng 31% ở các batch chạy thử) đến từ dữ liệu. Các sản phẩm này đã bị xóa khỏi Tiki sau khi danh sách ID được tạo, và đúng là không nên chạy lại chúng.
 
 ## Cấu trúc project
 
