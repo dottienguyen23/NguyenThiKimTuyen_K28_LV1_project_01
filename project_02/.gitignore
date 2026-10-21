@@ -1,0 +1,11 @@
+.venv/
+output/
+errors/
+logs/
+__pycache__/
+*.tmp
+data/
+*.tmp
+products_test.json
+errors_test.csv
+retry_ids.csv
