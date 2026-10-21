@@ -86,13 +86,14 @@ data/ids.csv ──► đọc & bỏ trùng ID ──► chia batch 1.000 ID
 | | **Nghỉ 0,2 giây (~1,9 req/s thực tế):** **bị chặn chỉ sau 11 request (6 giây)** |
 | | Chạy `probe_rate.py 1 150` ngay sau đó: bị chặn ở request đầu tiên. Lệnh chặn vẫn còn hiệu lực, nên cần nghỉ giữa các lần thử. Kiểm tra bằng `curl` vài phút sau thì đã nhận lại JSON |
 | Gửi request song song bằng `ThreadPoolExecutor`, đo bằng `steps/probe_workers.py` | **1 worker (0,64 req/s):** 100 request, không bị chặn, 55 ok / 45 `HTTP 404`. **2 worker (1,43 req/s):** **bị chặn**: 62 trên 100 request nhận trang chặn (31 ok / 7 `HTTP 404` trước đó). Giới hạn của Tiki **dưới ~1,4 req/s**, nên thêm worker không thể làm nhanh hơn → `MAX_WORKERS = 1` |
+| **Khoảng cách cố định giữa hai lần bắt đầu request** (`probe_rate.py` cải tiến) | Cách cũ nghỉ 1 giây **sau** mỗi phản hồi, lãng phí ~0,4 giây thời gian phản hồi. Cứ **1,0 giây** bắt đầu một request: 300 request, **không bị chặn**, đúng 1,00 req/s (Tiki trả lời trung bình 0,42 giây). Cứ **0,85 giây**: 300 request, **không bị chặn**, **1,17 req/s** |
 | Kiểm tra User-Agent | `curl` với User-Agent mặc định `curl/8.5.0` cũng nhận được JSON: lệnh chặn dựa vào **tốc độ request**, không dựa vào header |
 | Không bao giờ chạy lại `HTTP 404` | 37% ID (73.965) là sản phẩm không còn; mỗi ID chỉ tốn một request, không phải nhiều lần |
 | **Circuit breaker** (lượt chạy lại) | Sau 20 lỗi mạng liên tiếp: dừng, chờ đến khi API trả lời, chạy lại các ID đó. Lẽ ra đã tiết kiệm được phần lớn khoảng 40 giờ |
 | **Timeout ngắn hơn** (lượt chạy lại) | `TIMEOUT = 5` thay vì 10: một request chết tốn 6 giây thay vì 11 giây |
 | Tránh gián đoạn | `tmux`, đặt Windows sleep = *Never*, sửa wifi mà không restart |
 
-**Kết luận:** code không phải điểm nghẽn. Tiki chặn ở đâu đó giữa 0,75 và 1,4 request/giây, nên giới hạn tốc độ quyết định mức tối thiểu (khoảng 55–75 giờ), và phần lãng phí lớn nhất có thể tránh được (khoảng 40 giờ) đến từ việc chạy mù trên một kết nối đã chết. Cách rút ngắn hiệu quả nhất là **phát hiện lỗi sớm**, không phải gửi request nhanh hơn.
+**Kết luận:** code không phải điểm nghẽn. Tiki chấp nhận ít nhất 1,17 request/giây và chặn ở 1,43, nên giới hạn tốc độ quyết định mức tối thiểu. Với khoảng cách cố định 0,85 giây, 200.000 ID mất khoảng **47 giờ (~2 ngày)** thay vì ~74 giờ, và phần lãng phí lớn nhất có thể tránh được (khoảng 40 giờ) đến từ việc chạy mù trên một kết nối đã chết. Cách rút ngắn hiệu quả nhất là **phát hiện lỗi sớm**, không phải gửi request nhanh hơn.
 
 ## Chỗ sai và cách cải thiện
 

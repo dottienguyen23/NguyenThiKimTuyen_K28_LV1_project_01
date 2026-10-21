@@ -7,8 +7,8 @@ Output : output_retry/products_XXXX.json + errors_retry/errors_XXXX.csv
          (separate folders, so the first pass's checkpoint files are not touched)
          (thư mục riêng, để không đụng vào checkpoint của lượt một)
 
-Two improvements over scraper_simple.py, learned from the first run:
-Hai cải tiến so với scraper_simple.py, rút ra từ lần chạy đầu:
+Three improvements over scraper_simple.py, learned from the first run:
+Ba cải tiến so với scraper_simple.py, rút ra từ lần chạy đầu:
   1. TIMEOUT = 5 instead of 10: a dead request costs 6 s instead of 11 s
      TIMEOUT = 5 thay vì 10: một request chết tốn 6 giây thay vì 11 giây
   2. Circuit breaker: after 20 network errors in a row, stop sending requests,
@@ -17,6 +17,9 @@ Hai cải tiến so với scraper_simple.py, rút ra từ lần chạy đầu:
      chờ đến khi API trả lời lại, rồi chạy lại đúng ID đó.
      -> batches 0062-0073 of the first run (~12,000 timeouts) would not happen again
      -> các batch 0062-0073 của lần chạy đầu (~12.000 timeout) sẽ không lặp lại
+  3. Fixed interval between request starts (0.85 s) instead of a 1 s pause after each answer:
+     ~1.18 req/s instead of ~0.75 req/s, measured safe with probe_rate.py
+     Khoảng cách cố định giữa hai lần bắt đầu request thay vì nghỉ 1 giây sau mỗi phản hồi
 
 Run from the project folder / Chạy từ thư mục project:
     python steps/step8_check_results.py      # writes retry_ids.csv
@@ -40,7 +43,8 @@ API_URL = "https://api.tiki.vn/product-detail/api/v1/products/{}"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 BATCH_SIZE = 1000
-DELAY = 1.0
+INTERVAL = 0.85             # seconds between request STARTS (~1.18 req/s, measured safe with probe_rate.py)
+                            # giây giữa hai lần BẮT ĐẦU request (~1,18 req/s, đã đo an toàn)
 TIMEOUT = 5                  # first run: 10 / lần đầu: 10
 NETWORK_ERRORS = {"ReadTimeout", "ConnectTimeout", "Timeout", "ConnectionError"}
 MAX_ERRORS_IN_A_ROW = 20     # circuit breaker threshold / ngưỡng ngắt cầu dao
@@ -138,8 +142,10 @@ def main():
         i = 0
         while i < len(batch):
             product_id = batch[i]
+            t_start = time.monotonic()
             product, error = get_product(session, product_id)
-            time.sleep(DELAY)
+            # Sleep only what is left of the interval / chỉ nghỉ phần còn thiếu của khoảng cách
+            time.sleep(max(0.0, INTERVAL - (time.monotonic() - t_start)))
 
             if error in NETWORK_ERRORS or error == "blocked":
                 in_a_row += 1
