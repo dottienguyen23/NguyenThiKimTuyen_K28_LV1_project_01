@@ -77,14 +77,17 @@ data/ids.csv ──► đọc & bỏ trùng ID ──► chia batch 1.000 ID
 | Cách làm | Kết quả |
 |---|---|
 | `requests.Session()` (dùng lại kết nối) | Dùng trong cả hai phiên bản: không phải bắt tay TCP/TLS lại cho mỗi request |
-| Gửi request song song bằng `ThreadPoolExecutor` (`scraper.py`, `benchmark()`) | Đã thử 10, 20 và 50 worker: _[điền: thời gian và số lỗi mỗi mức]_ |
-| Tìm tốc độ an toàn bằng `probe_rate.py` | _[điền: tốc độ mà Tiki bắt đầu chặn]_ → giữ 1 worker, nghỉ 1 giây |
+| Kiểm tra tốc độ an toàn bằng `probe_rate.py` (mỗi lần một request) | **Nghỉ 1 giây (~0,75 req/s thực tế):** 150 request trong 200 giây, **không bị chặn**, 93 ok / 57 `HTTP 404` |
+| | **Nghỉ 0,2 giây (~1,9 req/s thực tế):** **bị chặn chỉ sau 11 request (6 giây)** |
+| | Chạy `probe_rate.py 1 150` ngay sau đó: bị chặn ở request đầu tiên. Lệnh chặn vẫn còn hiệu lực, nên cần nghỉ giữa các lần thử. Kiểm tra bằng `curl` vài phút sau thì đã nhận lại JSON |
+| Gửi request song song bằng `ThreadPoolExecutor`, đo bằng `steps/probe_workers.py` | **1 worker (0,64 req/s):** 100 request, không bị chặn, 55 ok / 45 `HTTP 404`. **2 worker (1,43 req/s):** **bị chặn**: 62 trên 100 request nhận trang chặn (31 ok / 7 `HTTP 404` trước đó). Giới hạn của Tiki **dưới ~1,4 req/s**, nên thêm worker không thể làm nhanh hơn → `MAX_WORKERS = 1` |
+| Kiểm tra User-Agent | `curl` với User-Agent mặc định `curl/8.5.0` cũng nhận được JSON: lệnh chặn dựa vào **tốc độ request**, không dựa vào header |
 | Không bao giờ chạy lại `HTTP 404` | Khoảng 31% ID là sản phẩm không còn; mỗi ID chỉ tốn một request, không phải nhiều lần |
 | **Circuit breaker** (lượt chạy lại) | Sau 20 lỗi mạng liên tiếp: dừng, chờ đến khi API trả lời, chạy lại các ID đó. Lẽ ra đã tiết kiệm được phần lớn khoảng 40 giờ |
 | **Timeout ngắn hơn** (lượt chạy lại) | `TIMEOUT = 5` thay vì 10: một request chết tốn 6 giây thay vì 11 giây |
 | Tránh gián đoạn | `tmux`, đặt Windows sleep = *Never*, sửa wifi mà không restart |
 
-**Kết luận:** code không phải điểm nghẽn. Giới hạn tốc độ của Tiki quyết định mức tối thiểu (khoảng 55 giờ), và phần lãng phí lớn nhất có thể tránh được (khoảng 40 giờ) đến từ việc chạy mù trên một kết nối đã chết. Cách rút ngắn hiệu quả nhất là **phát hiện lỗi sớm**, không phải gửi request nhanh hơn.
+**Kết luận:** code không phải điểm nghẽn. Tiki chặn ở đâu đó giữa 0,75 và 1,4 request/giây, nên giới hạn tốc độ quyết định mức tối thiểu (khoảng 55–75 giờ), và phần lãng phí lớn nhất có thể tránh được (khoảng 40 giờ) đến từ việc chạy mù trên một kết nối đã chết. Cách rút ngắn hiệu quả nhất là **phát hiện lỗi sớm**, không phải gửi request nhanh hơn.
 
 ## Chỗ sai và cách cải thiện
 
@@ -111,6 +114,7 @@ project_02/
 │   ├── step8_check_results.py       # độ đầy đủ: không thiếu, không trùng
 │   ├── step8b_profile_products.py   # chất lượng: trường rỗng, giá, description
 │   ├── step8c_runtime.py            # thời gian chạy: mỗi batch, các lần gián đoạn, dự báo
+│   ├── probe_workers.py             # Tiki chịu được bao nhiêu worker song song
 │   ├── step9_retry_failed.py        # lượt hai cho lỗi tạm thời, có circuit breaker
 │   └── step10_final_report.py       # gộp hai lượt -> final_errors.csv
 ├── GUIDE.md / GUIDE.vi.md

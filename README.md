@@ -77,14 +77,17 @@ Measured with `steps/step8c_runtime.py` from the time each output file was saved
 | Approach | Result |
 |---|---|
 | `requests.Session()` (reuse the connection) | Used in both versions: no new TCP/TLS handshake for every request |
-| Parallel requests with `ThreadPoolExecutor` (`scraper.py`, `benchmark()`) | Tested with 10, 20 and 50 workers: _[fill in: time and errors per setting]_ |
-| Finding the safe rate with `probe_rate.py` | _[fill in: the rate at which Tiki started blocking]_ → kept at 1 worker, 1 s delay |
+| Checking the safe rate with `probe_rate.py` (one request at a time) | **1 s delay (~0.75 req/s real):** 150 requests in 200 s, **no block**, 93 ok / 57 `HTTP 404` |
+| | **0.2 s delay (~1.9 req/s real):** **blocked after only 11 requests (6 s)** |
+| | Running `probe_rate.py 1 150` straight after: blocked at request 1. The block was still active, so a rest between tests is needed. A `curl` check a few minutes later returned JSON again |
+| Parallel requests with `ThreadPoolExecutor`, tested with `steps/probe_workers.py` | **1 worker (0.64 req/s):** 100 requests, no block, 55 ok / 45 `HTTP 404`. **2 workers (1.43 req/s):** **blocked**: 62 of 100 requests got the block page (31 ok / 7 `HTTP 404` before it). Tiki's limit is **below ~1.4 req/s**, so more workers cannot speed this up → `MAX_WORKERS = 1` |
+| User-Agent check | `curl` with its default `curl/8.5.0` User-Agent also got JSON: the block is about **request rate**, not about the header |
 | Never retrying `HTTP 404` | About 31% of IDs are products that no longer exist; each costs one request, not several |
 | **Circuit breaker** (retry pass) | After 20 network errors in a row: stop, wait until the API answers, redo those IDs. Would have saved most of the ~40 h |
 | **Shorter timeout** (retry pass) | `TIMEOUT = 5` instead of 10: a dead request costs 6 s instead of 11 s |
 | Avoiding pauses | `tmux`, Windows sleep set to *Never*, fixing Wi-Fi without restarting |
 
-**Conclusion:** the code was not the bottleneck. Tiki's rate limit sets the minimum (about 55 h), and the biggest avoidable loss (about 40 h) came from running blind on a dead connection. The most effective way to shorten the run is to **detect failure early**, not to send requests faster.
+**Conclusion:** the code was not the bottleneck. Tiki blocks somewhere between 0.75 and 1.4 requests per second, so the rate limit sets the minimum (about 55–75 h), and the biggest avoidable loss (about 40 h) came from running blind on a dead connection. The most effective way to shorten the run is to **detect failure early**, not to send requests faster.
 
 ## Mistakes and improvements
 
@@ -111,6 +114,7 @@ project_02/
 │   ├── step8_check_results.py       # completeness: nothing missing or duplicated
 │   ├── step8b_profile_products.py   # data quality: empty fields, prices, descriptions
 │   ├── step8c_runtime.py            # runtime: time per batch, pauses, forecast
+│   ├── probe_workers.py             # how many parallel workers Tiki tolerates
 │   ├── step9_retry_failed.py        # second pass for temporary errors, with a circuit breaker
 │   └── step10_final_report.py       # combines both passes -> final_errors.csv
 ├── GUIDE.md / GUIDE.vi.md
