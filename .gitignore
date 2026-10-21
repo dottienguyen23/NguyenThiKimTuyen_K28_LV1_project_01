@@ -1,0 +1,6 @@
+.venv/
+output/
+errors/
+logs/
+__pycache__/
+*.tmp
