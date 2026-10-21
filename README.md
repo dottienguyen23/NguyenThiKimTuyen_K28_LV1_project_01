@@ -86,13 +86,14 @@ Measured with `steps/step8c_runtime.py` from the time each output file was saved
 | | **0.2 s delay (~1.9 req/s real):** **blocked after only 11 requests (6 s)** |
 | | Running `probe_rate.py 1 150` straight after: blocked at request 1. The block was still active, so a rest between tests is needed. A `curl` check a few minutes later returned JSON again |
 | Parallel requests with `ThreadPoolExecutor`, tested with `steps/probe_workers.py` | **1 worker (0.64 req/s):** 100 requests, no block, 55 ok / 45 `HTTP 404`. **2 workers (1.43 req/s):** **blocked**: 62 of 100 requests got the block page (31 ok / 7 `HTTP 404` before it). Tiki's limit is **below ~1.4 req/s**, so more workers cannot speed this up → `MAX_WORKERS = 1` |
+| **Fixed interval between request starts** (improved `probe_rate.py`) | The old pacing slept 1 s **after** each answer, wasting the ~0.4 s response time. Starting a request every **1.0 s**: 300 requests, **no block**, exactly 1.00 req/s (Tiki answered in 0.42 s on average). Every **0.85 s**: 300 requests, **no block**, **1.17 req/s** |
 | User-Agent check | `curl` with its default `curl/8.5.0` User-Agent also got JSON: the block is about **request rate**, not about the header |
 | Never retrying `HTTP 404` | 37% of IDs (73,965) are products that no longer exist; each costs one request, not several |
 | **Circuit breaker** (retry pass) | After 20 network errors in a row: stop, wait until the API answers, redo those IDs. Would have saved most of the ~40 h |
 | **Shorter timeout** (retry pass) | `TIMEOUT = 5` instead of 10: a dead request costs 6 s instead of 11 s |
 | Avoiding pauses | `tmux`, Windows sleep set to *Never*, fixing Wi-Fi without restarting |
 
-**Conclusion:** the code was not the bottleneck. Tiki blocks somewhere between 0.75 and 1.4 requests per second, so the rate limit sets the minimum (about 55–75 h), and the biggest avoidable loss (about 40 h) came from running blind on a dead connection. The most effective way to shorten the run is to **detect failure early**, not to send requests faster.
+**Conclusion:** the code was not the bottleneck. Tiki accepts at least 1.17 requests per second and blocks at 1.43, so the rate limit sets the minimum. With fixed-interval pacing at 0.85 s, 200,000 IDs take about **47 h (~2 days)** instead of ~74 h, and the biggest avoidable loss (about 40 h) came from running blind on a dead connection. The most effective way to shorten the run is to **detect failure early**, not to send requests faster.
 
 ## Mistakes and improvements
 
