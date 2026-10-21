@@ -3,3 +3,4 @@
 *.tsv
 output/
 *.log
+final_errors.csv
