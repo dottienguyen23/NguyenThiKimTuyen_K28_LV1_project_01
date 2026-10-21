@@ -65,18 +65,30 @@ python steps/step2_clean_description.py
 
 ## 3. Tìm tốc độ an toàn
 
-Mỗi lần một request, với thời gian nghỉ cho trước (`python probe_rate.py <giây nghỉ> <số request>`):
+Mỗi lần một request: `python probe_rate.py <khoảng cách> <số request> [vị trí ID bắt đầu]`.
+`<khoảng cách>` là thời gian giữa hai lần **bắt đầu** request, nên `1.0` nghĩa là đúng 1 request mỗi giây, dù Tiki trả lời nhanh hay chậm. Trước khi đo, script kiểm tra API đang trả JSON (không còn lệnh chặn cũ); nó dừng ngay ở trang chặn đầu tiên, `403`, `429` hoặc 5 lỗi mạng liên tiếp.
 ```bash
-python probe_rate.py 1 150      # đã đo: ~0,7 req/s, không bị chặn
-# nghỉ + kiểm tra bằng curl trước lần tiếp theo
-python probe_rate.py 0.2 150    # đã đo: ~1,9 req/s, bị chặn sau 11 request
+python probe_rate.py 1.0 300 20000     # đã đo: 1,00 req/s, không bị chặn (Tiki trả lời ~0,42 giây)
+# nghỉ ít nhất 5 phút trước lần tiếp theo
+python probe_rate.py 0.85 300 30000    # đã đo: 1,17 req/s, không bị chặn
 ```
+Mỗi lần dùng vị trí ID khác nhau, để mỗi lần đo hỏi những sản phẩm khác nhau.
+
+Đo bằng phiên bản đầu của `probe_rate.py` (nghỉ **sau** mỗi phản hồi): ~0,7 req/s an toàn; ~1,9 req/s bị chặn sau 11 request.
 Nhiều worker song song, giống cách `scraper.py` gửi request:
 ```bash
 python -u steps/probe_workers.py 2>&1 | tee -a logs/probe_workers.log
 # đã đo: 1 worker 0,64 req/s ok; 2 worker 1,43 req/s bị chặn
 ```
-**Kết quả:** Tiki chặn ở đâu đó giữa 0,75 và 1,4 req/s → **1 worker, nghỉ 1 giây**.
+**Kết quả:** Tiki chấp nhận ít nhất **1,17 req/s** và chặn ở **1,43 req/s** → **1 worker, cứ 0,85 giây bắt đầu một request** (~1,18 req/s, thấp hơn mức bị chặn khoảng 18%). Khi đó 200.000 ID mất khoảng **47 giờ (~2 ngày)**.
+
+| Cách nghỉ | Tốc độ | 200k ID | Kết quả |
+|---|---|---|---|
+| Nghỉ 1 giây sau mỗi phản hồi (lần chạy đầu) | ~0,7 req/s | ~74 giờ | ✅ |
+| Cứ 1,0 giây một request | 1,00 req/s | ~56 giờ | ✅ |
+| **Cứ 0,85 giây một request** | **1,17 req/s** | **~47 giờ** | ✅ **dùng mức này** |
+| 2 worker | 1,43 req/s | — | ❌ bị chặn sau ~38 request |
+| Cứ ~0,2 giây một request | ~1,9 req/s | — | ❌ bị chặn sau 11 request |
 
 ## 4. Chạy thử
 
@@ -96,6 +108,9 @@ source .venv/bin/activate
 python -u scraper_simple.py 2>&1 | tee -a logs/run.log
 # Ctrl-b rồi d  -> thoát ra; scraper vẫn chạy
 ```
+`python -u NguyenThiKimTuyen_LV1_project_02.py` làm y hệt: đây là file nộp bài và nó chạy `scraper_simple.py`.
+
+Lần chạy đầu nghỉ 1 giây sau mỗi phản hồi (~0,7 req/s, ~23 phút mỗi batch). Muốn dùng tốc độ nhanh hơn đã đo, sửa phần nghỉ trong `scraper_simple.py` giống `steps/step9_retry_failed.py` (`INTERVAL = 0.85`: chỉ nghỉ phần còn thiếu của khoảng cách). Khi đó mỗi batch mất khoảng 14 phút.
 | Lệnh | Mục đích |
 |---|---|
 | `tmux ls` | liệt kê các session |
@@ -113,7 +128,7 @@ cut -d, -f2 "$(ls -t errors/*.csv | head -1)" | sort | uniq -c | sort -rn   # l�
 | Dấu hiệu bất thường | Nguyên nhân có thể | Cách xử lý |
 |---|---|---|
 | Một batch mất khoảng **3 giờ** thay vì ~23 phút | mọi request đều timeout (11 giây mỗi request): mất wifi hoặc mạng | Kiểm tra wifi (lệnh `curl` ở bước 2). Sửa mà không restart |
-| Batch mới nhất gần như toàn `ReadTimeout` / `ConnectTimeout` | như trên | như trên; các ID này được chạy lại ở bước 8 |
+| Batch mới nhất gần như toàn `ConnectionError` / `ReadTimeout` / `ConnectTimeout` | như trên | như trên; các ID này được chạy lại ở bước 8 |
 | Thông báo `Bị chặn` lặp lại liên tục | Tiki đang chặn | để yên: scraper tự chờ và thử lại đúng ID đó |
 | Hơn 1 giờ không có file mới, process vẫn sống | bị treo, hoặc Windows đã sleep | `tmux attach -t tiki` để xem |
 | `pgrep` không hiện gì | scraper đã dừng | chạy lại bước 5: các batch đã xong được bỏ qua |
@@ -136,7 +151,7 @@ source .venv/bin/activate
 python -u steps/step9_retry_failed.py 2>&1 | tee -a logs/retry.log
 # Ctrl-b rồi d
 ```
-Script ghi vào `output_retry/` và `errors_retry/` (không đụng vào lượt một), dùng timeout 5 giây, và có **circuit breaker**: sau 20 lỗi mạng liên tiếp thì dừng, chờ đến khi Tiki trả lời, rồi chạy lại các ID đó. Nếu nó dừng với `Stopped: no answer for 60 min`, chạy lại đúng lệnh đó sau; các batch đã xong được bỏ qua.
+Script ghi vào `output_retry/` và `errors_retry/` (không đụng vào lượt một), cứ **0,85 giây** bắt đầu một request (khoảng 2,8 giờ cho ~12.000 ID), dùng timeout 5 giây, và có **circuit breaker**: sau 20 lỗi mạng liên tiếp thì dừng, chờ đến khi Tiki trả lời, rồi chạy lại các ID đó. Nếu nó dừng với `Stopped: no answer for 60 min`, chạy lại đúng lệnh đó sau; các batch đã xong được bỏ qua.
 ```bash
 tail -3 logs/retry.log      # "Done / Xong!" = đã xong
 ```

@@ -65,18 +65,30 @@ python steps/step2_clean_description.py
 
 ## 3. Find the safe speed
 
-One request at a time, at a given delay (`python probe_rate.py <delay> <requests>`):
+One request at a time: `python probe_rate.py <interval> <requests> [first ID position]`.
+`<interval>` is the time between the **starts** of two requests, so `1.0` means exactly 1 request per second, whatever Tiki's response time. Before measuring, the script checks that the API answers JSON (no leftover block); it stops at the first block page, `403`, `429` or 5 network errors in a row.
 ```bash
-python probe_rate.py 1 150      # measured: ~0.7 req/s, no block
-# rest + curl check before the next one
-python probe_rate.py 0.2 150    # measured: ~1.9 req/s, blocked after 11 requests
+python probe_rate.py 1.0 300 20000     # measured: 1.00 req/s, no block (Tiki answers in ~0.42 s)
+# rest at least 5 minutes before the next one
+python probe_rate.py 0.85 300 30000    # measured: 1.17 req/s, no block
 ```
+Use a different ID position each time, so every test asks for different products.
+
+Measured with the first version of `probe_rate.py`, which paused **after** each answer: ~0.7 req/s safe; ~1.9 req/s blocked after 11 requests.
 Parallel workers, the way `scraper.py` sends requests:
 ```bash
 python -u steps/probe_workers.py 2>&1 | tee -a logs/probe_workers.log
 # measured: 1 worker 0.64 req/s ok; 2 workers 1.43 req/s blocked
 ```
-**Result:** Tiki blocks somewhere between 0.75 and 1.4 req/s → **1 worker, 1 s delay**.
+**Result:** Tiki accepts at least **1.17 req/s** and blocks at **1.43 req/s** → **1 worker, one request every 0.85 s** (~1.18 req/s, about 18% below the blocked rate). 200,000 IDs then take about **47 h (~2 days)**.
+
+| Pacing | Rate | 200k IDs | Result |
+|---|---|---|---|
+| 1 s pause after each answer (first run) | ~0.7 req/s | ~74 h | ✅ |
+| one request every 1.0 s | 1.00 req/s | ~56 h | ✅ |
+| **one request every 0.85 s** | **1.17 req/s** | **~47 h** | ✅ **use this** |
+| 2 workers | 1.43 req/s | — | ❌ blocked after ~38 requests |
+| one request every ~0.2 s | ~1.9 req/s | — | ❌ blocked after 11 requests |
 
 ## 4. Test run
 
@@ -96,6 +108,9 @@ source .venv/bin/activate
 python -u scraper_simple.py 2>&1 | tee -a logs/run.log
 # Ctrl-b then d  -> detach; the scraper keeps running
 ```
+`python -u NguyenThiKimTuyen_LV1_project_02.py` does the same: it is the submission file and runs `scraper_simple.py`.
+
+The first run paused 1 s after each answer (~0.7 req/s, ~23 min per batch). To use the faster measured pacing, change the pause in `scraper_simple.py` the same way as in `steps/step9_retry_failed.py` (`INTERVAL = 0.85`: sleep only what is left of the interval). A batch then takes about 14 minutes.
 | Command | Purpose |
 |---|---|
 | `tmux ls` | list sessions |
@@ -113,7 +128,7 @@ cut -d, -f2 "$(ls -t errors/*.csv | head -1)" | sort | uniq -c | sort -rn   # er
 | Red flag | Likely cause | Action |
 |---|---|---|
 | A batch takes about **3 hours** instead of ~23 min | every request times out (11 s each): Wi-Fi or network down | Check Wi-Fi (`curl` command in step 2). Fix without restarting |
-| Newest batch: nearly all `ReadTimeout` / `ConnectTimeout` | same | same; those IDs go to the retry in step 8 |
+| Newest batch: nearly all `ConnectionError` / `ReadTimeout` / `ConnectTimeout` | same | same; those IDs go to the retry in step 8 |
 | `Bị chặn` messages keep repeating | Tiki is blocking | leave it: the scraper waits and retries the same ID |
 | No new file for more than 1 hour, process alive | stuck, or Windows slept | `tmux attach -t tiki` and look |
 | `pgrep` shows nothing | the scraper stopped | start step 5 again: finished batches are skipped |
@@ -136,7 +151,7 @@ source .venv/bin/activate
 python -u steps/step9_retry_failed.py 2>&1 | tee -a logs/retry.log
 # Ctrl-b then d
 ```
-It writes to `output_retry/` and `errors_retry/` (the first pass is not touched), uses a 5 s timeout, and has a **circuit breaker**: after 20 network errors in a row it stops, waits until Tiki answers, and redoes those IDs. If it stops with `Stopped: no answer for 60 min`, run the same command again later; finished retry batches are skipped.
+It writes to `output_retry/` and `errors_retry/` (the first pass is not touched), starts one request every **0.85 s** (about 2.8 h for ~12,000 IDs), uses a 5 s timeout, and has a **circuit breaker**: after 20 network errors in a row it stops, waits until Tiki answers, and redoes those IDs. If it stops with `Stopped: no answer for 60 min`, run the same command again later; finished retry batches are skipped.
 ```bash
 tail -3 logs/retry.log      # "Done / Xong!" = finished
 ```
