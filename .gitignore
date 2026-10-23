@@ -10,3 +10,7 @@ products_test.json
 errors_test.csv
 retry_ids.csv
 final_errors.csv
+dev/
+output_retry/
+errors_retry/
+retry/

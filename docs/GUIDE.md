@@ -1,10 +1,10 @@
 # Tiki Product Scraper – Step-by-step Guide (Project 02)
 
-🌐 **English** | [Tiếng Việt](GUIDE.vi.md)
-
 **Goal:** fetch about 200,000 Tiki products through the API, keep 6 fields (`id`, `name`, `url_key`, `price`, `description`, `images`), clean the `description`, save about 1,000 products per JSON file, and record every failed ID with its reason.
 
-This guide does not start with the final code. Each level begins with a **problem**. Try to answer **🤔 Think first** before you open the solution. The final versions are `scraper_simple.py` (level 6) and `scraper.py` (level 9).
+This guide does not start with the final code. Each level begins with a **problem**. Try to answer **🤔 Think first** before you open the solution.
+
+The published code is the final production version, [`src/scraper.py`](../src/scraper.py) (level 10). The intermediate scripts from levels 1–9 are not in the repository; each level shows the key code instead. How to run the scraper is in the [Runbook](RUNBOOK.md).
 
 | Section | Meaning |
 |---|---|
@@ -25,10 +25,11 @@ This guide does not start with the final code. Each level begins with a **proble
 | 3 | Loop over many IDs, save one file | One bad response crashes everything |
 | 4 | Error handling | 3+ days of running; a restart means starting over |
 | 5 | Batches + checkpoint | Tiki blocks bots |
-| 6 | Block detection → `scraper_simple.py` | Closing the terminal or restarting kills the scraper |
+| 6 | Block detection (simple version) | Closing the terminal or restarting kills the scraper |
 | 7 | Operations: `tmux`, logs | Is the result complete and correct? |
 | 8 | Check the result | Want it more robust and automatic |
-| 9 | Hardening → `scraper.py` (v4) | — |
+| 9 | Hardening (v4) | Settings live in the code; a dead network still produces thousands of errors |
+| 10 | Production → `src/scraper.py` (v5) | — |
 
 ---
 
@@ -81,7 +82,7 @@ curl -s -A "Mozilla/5.0" https://api.tiki.vn/product-detail/api/v1/products/1391
 💡 **Hint:** `requests.get(..., timeout=10)`, `r.json()`, `dict.get()`.
 
 <details>
-<summary>✅ Solution: <code>steps/step1_one_product.py</code></summary>
+<summary>✅ Solution</summary>
 
 ```python
 r = requests.get(API_URL.format(PRODUCT_ID), headers=HEADERS, timeout=10)
@@ -121,7 +122,7 @@ product = {
 💡 **Hint:** `BeautifulSoup(...).get_text(" ")`, `html.unescape()`, `re.sub(r"\s+", " ", ...)`.
 
 <details>
-<summary>✅ Solution: <code>steps/step2_clean_description.py</code></summary>
+<summary>✅ Solution</summary>
 
 ```python
 def clean_description(raw_html):
@@ -156,7 +157,7 @@ def clean_description(raw_html):
 💡 **Hint:** `str.isdigit()`, `list(dict.fromkeys(ids))`, `time.sleep()`, `json.dump(..., ensure_ascii=False)`.
 
 <details>
-<summary>✅ Solution: <code>steps/step3_loop.py</code></summary>
+<summary>✅ Solution</summary>
 
 ```python
 def read_ids(path):
@@ -207,7 +208,7 @@ def read_ids(path):
 💡 **Hint:** `try/except requests.RequestException`, `timeout=10`, return a tuple `(product, error)`, `requests.Session()`.
 
 <details>
-<summary>✅ Solution: <code>steps/step4_errors.py</code></summary>
+<summary>✅ Solution</summary>
 
 ```python
 def get_product(session, product_id):
@@ -262,7 +263,7 @@ else:
 💡 **Hint:** one file per 1,000 IDs, `os.path.exists()`, write to `.tmp` then `os.replace()`.
 
 <details>
-<summary>✅ Solution: <code>steps/step5_batch_checkpoint.py</code></summary>
+<summary>✅ Solution</summary>
 
 ```python
 for start in range(0, len(ids), BATCH_SIZE):
@@ -300,7 +301,7 @@ os.replace(out + ".tmp", out)
 
 ---
 
-## Level 6 – Getting blocked → `scraper_simple.py`
+## Level 6 – Getting blocked (simple version)
 
 🎯 **Goal:** recognize when Tiki blocks the bot, and wait instead of writing thousands of fake errors.
 
@@ -311,7 +312,7 @@ os.replace(out + ".tmp", out)
 💡 **Hint:** check `Content-Type` for `"json"`; on a block, `sleep` and retry **the same ID**.
 
 <details>
-<summary>✅ Solution: <code>scraper_simple.py</code></summary>
+<summary>✅ Solution</summary>
 
 ```python
 if "json" not in r.headers.get("Content-Type", ""):
@@ -352,7 +353,8 @@ def get_product_wait_if_blocked(session, product_id):
 cd /mnt/c/Users/Admin/Desktop/Project_02
 tmux new -s tiki                          # named session that survives closing the window
 source .venv/bin/activate
-python -u scraper_simple.py 2>&1 | tee -a logs/run.log
+python -u src/scraper.py
+# (the simple version needed: python -u scraper_simple.py 2>&1 | tee -a logs/run.log)
 # Ctrl-b then d  -> detach, scraper keeps running
 ```
 
@@ -395,7 +397,7 @@ python -u scraper_simple.py 2>&1 | tee -a logs/run.log
 💡 **Hint:** `glob`, `csv.DictReader`, `collections.Counter`.
 
 <details>
-<summary>✅ Solution: <code>steps/step8_check_results.py</code></summary>
+<summary>✅ Solution</summary>
 
 The script:
 1. counts products in `output/products_*.json` and errors in `errors/errors_*.csv`;
@@ -403,7 +405,9 @@ The script:
 3. prints the errors grouped by `reason`;
 4. writes every non-404 error ID to `retry_ids.csv` for a second pass.
 
-`csv.DictReader` reads by column name, so it works even when error files have 2 columns (`scraper_simple.py`) or 3 columns (`scraper.py`).
+`csv.DictReader` reads by column name, so it works even when error files have 2 columns (simple version) or 3 columns (v4 and later).
+
+In v5 this check is built in: it runs at the end of every full run and sets the exit code.
 
 </details>
 
@@ -411,13 +415,13 @@ The script:
 
 ---
 
-## Level 9 – Hardening → `scraper.py` (v4)
+## Level 9 – Hardening (v4)
 
-What v4 adds on top of `scraper_simple.py`, and why:
+What v4 adds on top of the simple version, and why:
 
 | Addition | Why |
 |---|---|
-| `BASE_DIR = Path(__file__).resolve().parent` | Paths work from any working directory |
+| `BASE_DIR = Path(__file__).resolve().parent` | Paths work from any working directory (in v5 `.parent.parent`, because the script moved into `src/`) |
 | `load_ids()` reports invalid and duplicate counts | Bad input is visible instead of silently dropped |
 | `explore_one()` test call before the run | Stop early if the API is down or blocked |
 | `Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, ...])` | Temporary errors are retried automatically, with growing waits |
@@ -438,6 +442,51 @@ grep "bị chặn" logs/run.log
 
 ---
 
+## Level 10 – Production → `src/scraper.py` (v5)
+
+🎯 **Goal:** one script that anyone can run safely without editing code, and that tells a scheduler whether the run succeeded.
+
+⚠️ **Problem:** v4 still had development habits:
+- Settings were edited inside the code. `LIMIT = 3000` was left in, so a "full run" would only fetch 3,000 IDs.
+- A dead network still turned every ID into `ConnectionError` (the 40-hour Wi-Fi outage).
+- The pacing slept 1 s **after** each answer, wasting Tiki's ~0.4 s response time.
+- It always exited with code 0, even when it stopped early.
+
+🤔 **Think first:** if this script ran every night from a scheduler, with nobody watching the screen, how would the scheduler know whether the run worked?
+
+<details>
+<summary>✅ Solution: <code>src/scraper.py</code></summary>
+
+| Change | Why |
+|---|---|
+| `argparse` options: `--limit`, `--interval`, `--workers`, `--ids`, `--root`... | Safe defaults (full run); no code edits; `--help` documents itself |
+| `RateLimiter`: one request start every `--interval` seconds, shared by all threads | Exact rate. Default 1.0 s = 1 req/s, about 30% faster than "1 s after each answer" at the same safety |
+| Circuit breaker: 20 network errors in a row halt the batch | A Wi-Fi outage becomes a wait-and-redo, not thousands of `ConnectionError` rows |
+| `validate()` checks only this ID list's batches and reports missing ones | Leftover files from other runs can't fake a pass |
+| Exit codes `0` / `1` / `2` / `130` | A scheduler or script can tell success from failure |
+| Full date in every log line | A run lasts days; `17:03` alone is ambiguous |
+| Pre-flight handles "no connection" cleanly | A clear message instead of a traceback |
+
+```python
+class RateLimiter:
+    def wait(self):
+        with self._lock:
+            now = time.monotonic()
+            start = max(now, self._next)
+            self._next = start + self.interval
+        time.sleep(start - now)
+```
+
+The file names, batch size and checkpoint did **not** change, so v5 resumes from v4's output: the first v5 test logged `skipped 1 finished batches` and `products + errors = 1000 | input IDs = 1000 -> OK`.
+
+</details>
+
+**Answer:** the **exit code**. `echo $?` prints it after a run; schedulers, `cron` and CI systems all read it.
+
+📌 **Lesson:** "production-ready" means the script is safe to run by someone who didn't write it: configuration from the outside, failures that stop loudly, and a result that can be checked automatically.
+
+---
+
 ## Appendix – Git mistakes made along the way
 
 | Mistake | Effect | Fix |
@@ -446,5 +495,9 @@ grep "bị chặn" logs/run.log
 | `user.email "<me@gmail.com>"` with angle brackets | The brackets are stored in the email; GitHub can't link commits to the account | `git config --global user.email "me@gmail.com"` |
 | `data/` not in `.gitignore` | `git add .` would commit large data files | Add `data/` to `.gitignore` |
 | `U` next to a file in VS Code | The file is untracked, not in any commit yet | `git add <file>` then commit |
+
+| `git mv *.py src/` | Only top-level `.py` files moved; the `steps/` folder stayed behind | Move folders separately: `git mv steps src/` |
+| `git rm` without `--cached` | Deletes the file from disk, not only from Git | `git rm --cached <file>` keeps it locally; then add it to `.gitignore` |
+| Restructuring the subtree copy (`project_02/`) instead of the source folder | The next `git subtree pull` conflicts | Change `Project_02` first, then pull into the portfolio repo |
 
 Tip: commit once per level (`step 3: loop over IDs`) so `git log` tells the same story as this guide.
